@@ -4,40 +4,163 @@
     <title>Muse Headset Connector</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
+        :root {
+            --primary-color: #0066cc;
+            --secondary-color: #ADD8E6;
+            --accent-color: #00ff00;
+        }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
+            position: relative;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
         }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+            display: inline-block;
+        }
+
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 2px;
+        }
+
         .status {
             margin: 20px 0;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.1);
         }
+
         .connected {
             background-color: #d4edda;
             color: #155724;
+            border-left: 4px solid var(--accent-color);
         }
+
         .disconnected {
             background-color: #f8d7da;
             color: #721c24;
+            border-left: 4px solid #dc3545;
         }
+
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             font-size: 16px;
             cursor: pointer;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
         .data-display {
             margin-top: 20px;
-            padding: 10px;
+            padding: 20px;
             border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .data-display h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        .connection-status {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            margin: 20px 0;
+            padding-right: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--secondary-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .status-text {
+            color: var(--primary-color);
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .wave-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            overflow: hidden;
+            line-height: 0;
+            transform: rotate(180deg);
+        }
+
+        .wave-container svg {
+            position: relative;
+            display: block;
+            width: calc(100% + 1.3px);
+            height: 150px;
+        }
+
+        .wave-container .shape-fill {
+            fill: var(--secondary-color);
+            opacity: 1;
+        }
+
+        .network-image {
+            position: fixed;
+            bottom: 150px;
+            left: 20px;
+            transform: none;
+            width: 200px;
+            height: auto;
+            opacity: 0.8;
+            z-index: 1;
         }
     </style>
 </head>
 <body>
     <h1>Muse Headset Connector</h1>
+    
+    <div class="connection-status">
+        <div class="spinner"></div>
+        <div class="status-text" id="connectionStatusText">Searching for MQTT...</div>
+    </div>
     
     <div id="mqttStatus" class="status disconnected">
         MQTT: Disconnected
@@ -52,6 +175,14 @@
     <div class="data-display">
         <h3>Latest Data:</h3>
         <pre id="latestData">No data yet</pre>
+    </div>
+
+    <img src="assets/net.png" alt="Network Connection" class="network-image">
+
+    <div class="wave-container">
+        <svg data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+            <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z" class="shape-fill"></path>
+        </svg>
     </div>
 
     <script>
@@ -74,6 +205,7 @@
             client.on('connect', () => {
                 document.getElementById('mqttStatus').textContent = 'MQTT: Connected';
                 document.getElementById('mqttStatus').className = 'status connected';
+                document.getElementById('connectionStatusText').textContent = 'Searching for Muse...';
                 
                 // Subscribe to a test topic to verify connection
                 client.subscribe('bdrxr/test', (err) => {
@@ -86,20 +218,19 @@
             client.on('error', (error) => {
                 document.getElementById('mqttStatus').textContent = 'MQTT: Error - ' + error.message;
                 document.getElementById('mqttStatus').className = 'status disconnected';
-            });
-
-            client.on('message', (topic, message) => {
-                console.log('Received message:', topic, message.toString());
+                document.getElementById('connectionStatusText').textContent = 'Searching for MQTT...';
             });
 
             client.on('close', () => {
                 document.getElementById('mqttStatus').textContent = 'MQTT: Connection closed';
                 document.getElementById('mqttStatus').className = 'status disconnected';
+                document.getElementById('connectionStatusText').textContent = 'Searching for MQTT...';
             });
 
             // Muse connection handling
             document.getElementById('connectButton').addEventListener('click', async () => {
                 try {
+                    document.getElementById('connectionStatusText').textContent = 'Searching for Muse...';
                     // Request Muse device
                     museDevice = await navigator.bluetooth.requestDevice({
                         filters: [{ namePrefix: 'Muse' }]
@@ -111,6 +242,7 @@
                     museServer = await museDevice.gatt.connect();
                     document.getElementById('museStatus').textContent = 'Muse: Connected';
                     document.getElementById('museStatus').className = 'status connected';
+                    document.getElementById('connectionStatusText').textContent = 'Connected to Muse';
 
                     // Subscribe to EEG data
                     const eegService = await museServer.getPrimaryService('273e0001-4c4d-1d89-9f30-0a65ccd5eb2d');
