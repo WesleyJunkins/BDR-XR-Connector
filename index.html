@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Muse Headset Connector</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .data-display {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Muse Headset Connector</h1>
+    
+    <div id="mqttStatus" class="status disconnected">
+        MQTT: Disconnected
+    </div>
+    
+    <div id="museStatus" class="status disconnected">
+        Muse: Disconnected
+    </div>
+
+    <button id="connectButton">Connect to Muse</button>
+    
+    <div class="data-display">
+        <h3>Latest Data:</h3>
+        <pre id="latestData">No data yet</pre>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // MQTT Configuration
+            const options = {
+                clientId: 'muse_connector_' + Math.random().toString(16).substr(2, 8),
+                username: 'bdrXR1crimson',
+                password: 'bdrXR1crimson',
+                port: 8883,
+                protocol: 'wss'
+            };
+
+            // Initialize MQTT client with the correct URL format
+            const client = mqtt.connect("wss://21c4029e653247699764b7b976972f4f.s1.eu.hivemq.cloud:8883/mqtt", options);
+            let museDevice = null;
+            let museServer = null;
+
+            // MQTT Connection handling
+            client.on('connect', () => {
+                document.getElementById('mqttStatus').textContent = 'MQTT: Connected';
+                document.getElementById('mqttStatus').className = 'status connected';
+                
+                // Subscribe to a test topic to verify connection
+                client.subscribe('bdrxr/test', (err) => {
+                    if (!err) {
+                        client.publish('bdrxr/test', 'Hello MQTT');
+                    }
+                });
+            });
+
+            client.on('error', (error) => {
+                document.getElementById('mqttStatus').textContent = 'MQTT: Error - ' + error.message;
+                document.getElementById('mqttStatus').className = 'status disconnected';
+            });
+
+            client.on('message', (topic, message) => {
+                console.log('Received message:', topic, message.toString());
+            });
+
+            client.on('close', () => {
+                document.getElementById('mqttStatus').textContent = 'MQTT: Connection closed';
+                document.getElementById('mqttStatus').className = 'status disconnected';
+            });
+
+            // Muse connection handling
+            document.getElementById('connectButton').addEventListener('click', async () => {
+                try {
+                    // Request Muse device
+                    museDevice = await navigator.bluetooth.requestDevice({
+                        filters: [{ namePrefix: 'Muse' }]
+                    });
+
+                    document.getElementById('museStatus').textContent = 'Muse: Connecting...';
+                    
+                    // Connect to device
+                    museServer = await museDevice.gatt.connect();
+                    document.getElementById('museStatus').textContent = 'Muse: Connected';
+                    document.getElementById('museStatus').className = 'status connected';
+
+                    // Subscribe to EEG data
+                    const eegService = await museServer.getPrimaryService('273e0001-4c4d-1d89-9f30-0a65ccd5eb2d');
+                    const eegCharacteristic = await eegService.getCharacteristic('273e0001-4c4d-1d89-9f30-0a65ccd5eb2d');
+                    await eegCharacteristic.startNotifications();
+
+                    eegCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                        const data = Array.from(event.target.value.buffer);
+                        const message = JSON.stringify({
+                            timestamp: Date.now(),
+                            eeg: data
+                        });
+                        client.publish('bdrxr/muse_eeg', message);
+                        updateLatestData('EEG', data);
+                    });
+
+                    // Subscribe to accelerometer data
+                    const accelService = await museServer.getPrimaryService('273e0002-4c4d-1d89-9f30-0a65ccd5eb2d');
+                    const accelCharacteristic = await accelService.getCharacteristic('273e0002-4c4d-1d89-9f30-0a65ccd5eb2d');
+                    await accelCharacteristic.startNotifications();
+
+                    accelCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                        const data = Array.from(event.target.value.buffer);
+                        const message = JSON.stringify({
+                            timestamp: Date.now(),
+                            accelerometer: data
+                        });
+                        client.publish('bdrxr/muse_accelerometer', message);
+                        updateLatestData('Accelerometer', data);
+                    });
+
+                    // Subscribe to gyroscope data
+                    const gyroService = await museServer.getPrimaryService('273e0003-4c4d-1d89-9f30-0a65ccd5eb2d');
+                    const gyroCharacteristic = await gyroService.getCharacteristic('273e0003-4c4d-1d89-9f30-0a65ccd5eb2d');
+                    await gyroCharacteristic.startNotifications();
+
+                    gyroCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                        const data = Array.from(event.target.value.buffer);
+                        const message = JSON.stringify({
+                            timestamp: Date.now(),
+                            gyroscope: data
+                        });
+                        client.publish('bdrxr/muse_gyroscope', message);
+                        updateLatestData('Gyroscope', data);
+                    });
+
+                } catch (error) {
+                    document.getElementById('museStatus').textContent = 'Muse: Error - ' + error.message;
+                    document.getElementById('museStatus').className = 'status disconnected';
+                }
+            });
+
+            // Update the latest data display
+            function updateLatestData(type, data) {
+                const latestData = document.getElementById('latestData');
+                latestData.textContent = `Latest ${type} Data:\n${JSON.stringify(data, null, 2)}`;
+            }
+
+            // Handle device disconnection
+            if (museDevice) {
+                museDevice.addEventListener('gattserverdisconnected', () => {
+                    document.getElementById('museStatus').textContent = 'Muse: Disconnected';
+                    document.getElementById('museStatus').className = 'status disconnected';
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
