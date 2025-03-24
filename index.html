@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Muse Headset Connector</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="js/fili.min.js"></script>
+    <script src="js/bci.min.js"></script>
+    <script src="js/BCIDevice.build.js"></script>
+    <script src="js/physio.js"></script>
     <style>
         :root {
             --primary-color: #0066cc;
@@ -22,30 +27,19 @@
 
         h1 {
             color: var(--primary-color);
-            text-align: center;
+            text-align: right;
             margin-bottom: 30px;
             position: relative;
             display: inline-block;
-        }
-
-        h1::after {
-            content: '';
-            position: absolute;
-            bottom: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            height: 3px;
-            background: var(--primary-color);
-            border-radius: 2px;
+            float: right;
         }
 
         .status {
             margin: 20px 0;
             padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.1);
         }
 
         .connected {
@@ -69,12 +63,12 @@
             border: none;
             border-radius: 25px;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
 
         .data-display {
@@ -83,18 +77,157 @@
             border: 1px solid #ddd;
             border-radius: 8px;
             background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .data-display h3 {
             color: var(--primary-color);
             margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .data-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .data-section.basic-info {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .data-section.basic-info .data-section-title {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--secondary-color);
+        }
+
+        .data-section.basic-info .data-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .data-section.basic-info .data-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .data-section.basic-info .data-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-section.basic-info .data-value {
+            font-size: 1.4em;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .data-section.basic-info {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .data-section-title {
+            color: var(--primary-color);
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .data-item:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .data-value {
+            color: #333;
+            font-weight: 600;
+        }
+
+        .band-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 15px;
+        }
+
+        .band-section-title {
+            color: var(--primary-color);
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .band-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .band-value {
+            background: white;
+            padding: 4px;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+        }
+
+        .band-label {
+            color: #666;
+            font-size: 0.8em;
+            margin-bottom: 2px;
+        }
+
+        .band-number {
+            color: #333;
+            font-weight: 600;
+            font-size: 1em;
         }
 
         .connection-status {
             display: flex;
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-start;
             gap: 10px;
             margin: 20px 0;
             padding-right: 20px;
@@ -116,8 +249,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .wave-container {
@@ -152,26 +290,146 @@
             opacity: 0.8;
             z-index: 1;
         }
+
+        .mqtt-config {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .mqtt-config h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .config-item label {
+            font-weight: 500;
+            color: #666;
+        }
+
+        .config-item input,
+        .config-item select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .config-item input:focus,
+        .config-item select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+        }
+
+        .button-container {
+            margin-top: 20px;
+            text-align: center;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        #mqttConnectButton {
+            background: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        #mqttConnectButton:hover {
+            background: #0052a3;
+            transform: translateY(-2px);
+        }
+
+        #mqttConnectButton:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #mqttConnectButton.refresh {
+            background: #28a745;
+        }
+
+        #mqttConnectButton.refresh:hover {
+            background: #218838;
+        }
     </style>
 </head>
+
 <body>
     <h1>Muse Headset Connector</h1>
-    
+
     <div class="connection-status">
         <div class="spinner"></div>
         <div class="status-text" id="connectionStatusText">Searching for MQTT...</div>
     </div>
-    
+
     <div id="mqttStatus" class="status disconnected">
         MQTT: Disconnected
     </div>
-    
+
     <div id="museStatus" class="status disconnected">
         Muse: Disconnected
     </div>
 
+    <div class="mqtt-config">
+        <h3>MQTT Configuration</h3>
+        <div class="config-grid">
+            <div class="config-item">
+                <label for="protocol">Protocol:</label>
+                <select id="protocol">
+                    <option value="wss">WSS (Secure)</option>
+                    <option value="ws">WS (Unsecure)</option>
+                </select>
+            </div>
+            <div class="config-item">
+                <label for="brokerUrl">Broker URL:</label>
+                <input type="text" id="brokerUrl" placeholder="21c4029e653247699764b7b976972f4f.s1.eu.hivemq.cloud">
+            </div>
+            <div class="config-item">
+                <label for="port">Port:</label>
+                <input type="number" id="port" placeholder="8884">
+            </div>
+            <div class="config-item">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="bdrXR1crimson">
+            </div>
+            <div class="config-item">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="bdrXR1crimson">
+            </div>
+            <div class="config-item">
+                <label for="topic">Topic:</label>
+                <input type="text" id="topic" placeholder="bdrxr/connectorToWeb">
+            </div>
+        </div>
+        <div class="button-container">
+            <button id="mqttConnectButton">Connect to MQTT</button>
+        </div>
+    </div>
+
     <button id="connectButton">Connect to Muse</button>
-    
+
     <div class="data-display">
         <h3>Latest Data:</h3>
         <pre id="latestData">No data yet</pre>
@@ -181,134 +439,407 @@
 
     <div class="wave-container">
         <svg data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
-            <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z" class="shape-fill"></path>
+            <path
+                d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z"
+                class="shape-fill"></path>
         </svg>
     </div>
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            // MQTT Configuration
-            const options = {
-                clientId: 'muse_connector_' + Math.random().toString(16).substr(2, 8),
+            // Default MQTT configuration
+            const defaultConfig = {
+                protocol: 'wss',
+                brokerUrl: 'wss://21c4029e653247699764b7b976972f4f.s1.eu.hivemq.cloud',
+                port: 8884,
                 username: 'bdrXR1crimson',
                 password: 'bdrXR1crimson',
-                port: 8884,
-                protocol: 'wss'
+                topic: 'bdrxr/connectorToWeb'
             };
 
-            // Initialize MQTT client with the correct URL format
-            const client = mqtt.connect("wss://21c4029e653247699764b7b976972f4f.s1.eu.hivemq.cloud:8884/mqtt", options);
+            let client = null;
+            let physio = null;
             let museDevice = null;
             let museServer = null;
 
+            // Function to get current MQTT configuration
+            function getMqttConfig() {
+                const protocol = document.getElementById('protocol').value || defaultConfig.protocol;
+                const brokerUrl = document.getElementById('brokerUrl').value || defaultConfig.brokerUrl;
+                const port = document.getElementById('port').value || defaultConfig.port;
+                const username = document.getElementById('username').value || defaultConfig.username;
+                const password = document.getElementById('password').value || defaultConfig.password;
+                const topic = document.getElementById('topic').value || defaultConfig.topic;
+
+                // Construct the full broker URL
+                let fullBrokerUrl = brokerUrl;
+                if (!brokerUrl.startsWith('wss://') && !brokerUrl.startsWith('ws://')) {
+                    fullBrokerUrl = `${protocol}://${brokerUrl}`;
+                }
+                if (!brokerUrl.endsWith('/mqtt')) {
+                    fullBrokerUrl = `${fullBrokerUrl}/mqtt`;
+                }
+
+                return {
+                    protocol,
+                    brokerUrl: fullBrokerUrl,
+                    port,
+                    username,
+                    password,
+                    topic
+                };
+            }
+
             // MQTT Connection handling
-            client.on('connect', () => {
-                document.getElementById('mqttStatus').textContent = 'MQTT: Connected';
-                document.getElementById('mqttStatus').className = 'status connected';
-                document.getElementById('connectionStatusText').textContent = 'Searching for Muse...';
-                
-                // Subscribe to a test topic to verify connection
-                client.subscribe('bdrxr/test', (err) => {
-                    if (!err) {
-                        client.publish('bdrxr/test', 'Hello MQTT');
-                    }
+            function setupMqttConnection() {
+                const config = getMqttConfig();
+                const options = {
+                    clientId: 'muse_connector_' + Math.random().toString(16).substr(2, 8),
+                    username: config.username,
+                    password: config.password,
+                    port: config.port,
+                    protocol: config.protocol
+                };
+
+                // Initialize MQTT client with the constructed URL
+                client = mqtt.connect(config.brokerUrl, options);
+
+                client.on('connect', () => {
+                    document.getElementById('mqttStatus').textContent = 'MQTT: Connected';
+                    document.getElementById('mqttStatus').className = 'status connected';
+                    document.getElementById('connectionStatusText').textContent = 'MQTT Connected';
+                    document.getElementById('mqttConnectButton').disabled = false;
+                    document.getElementById('mqttConnectButton').textContent = 'Refresh Connection';
+                    document.getElementById('mqttConnectButton').classList.add('refresh');
                 });
-            });
 
-            client.on('error', (error) => {
-                document.getElementById('mqttStatus').textContent = 'MQTT: Error - ' + error.message;
-                document.getElementById('mqttStatus').className = 'status disconnected';
-                document.getElementById('connectionStatusText').textContent = 'Searching for MQTT...';
-            });
+                client.on('error', (error) => {
+                    document.getElementById('mqttStatus').textContent = 'MQTT: Error - ' + error.message;
+                    document.getElementById('mqttStatus').className = 'status disconnected';
+                    document.getElementById('connectionStatusText').textContent = 'MQTT Error';
+                    document.getElementById('mqttConnectButton').disabled = false;
+                    document.getElementById('mqttConnectButton').textContent = 'Connect to MQTT';
+                    document.getElementById('mqttConnectButton').classList.remove('refresh');
+                });
 
-            client.on('close', () => {
-                document.getElementById('mqttStatus').textContent = 'MQTT: Connection closed';
-                document.getElementById('mqttStatus').className = 'status disconnected';
-                document.getElementById('connectionStatusText').textContent = 'Searching for MQTT...';
+                client.on('close', () => {
+                    document.getElementById('mqttStatus').textContent = 'MQTT: Connection closed';
+                    document.getElementById('mqttStatus').className = 'status disconnected';
+                    document.getElementById('connectionStatusText').textContent = 'MQTT Disconnected';
+                    document.getElementById('mqttConnectButton').disabled = false;
+                    document.getElementById('mqttConnectButton').textContent = 'Connect to MQTT';
+                    document.getElementById('mqttConnectButton').classList.remove('refresh');
+                });
+            }
+
+            // Add click handler for MQTT connect/refresh button
+            document.getElementById('mqttConnectButton').addEventListener('click', async () => {
+                if (!client || !client.connected) {
+                    setupMqttConnection();
+                } else {
+                    try {
+                        // Disconnect from Muse if connected
+                        if (physio) {
+                            physio.device.disconnect();
+                            physio = null;
+                            document.getElementById('museStatus').textContent = 'Muse: Disconnected';
+                            document.getElementById('museStatus').className = 'status disconnected';
+                        }
+
+                        // Disconnect from MQTT
+                        client.end();
+                        document.getElementById('mqttStatus').textContent = 'MQTT: Disconnected';
+                        document.getElementById('mqttStatus').className = 'status disconnected';
+                        document.getElementById('connectionStatusText').textContent = 'MQTT Disconnected';
+                        document.getElementById('mqttConnectButton').textContent = 'Connect to MQTT';
+                        document.getElementById('mqttConnectButton').classList.remove('refresh');
+
+                        // Wait a moment before reconnecting
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+
+                        // Reconnect to MQTT
+                        setupMqttConnection();
+
+                    } catch (error) {
+                        console.error('Error during refresh:', error);
+                        document.getElementById('connectionStatusText').textContent = 'Refresh Error';
+                    }
+                }
             });
 
             // Muse connection handling
             document.getElementById('connectButton').addEventListener('click', async () => {
+                if (!client || !client.connected) {
+                    alert('Please connect to MQTT first');
+                    return;
+                }
+
                 try {
+                    // console.log('Starting Muse connection process...');
                     document.getElementById('connectionStatusText').textContent = 'Searching for Muse...';
-                    // Request Muse device
-                    museDevice = await navigator.bluetooth.requestDevice({
-                        filters: [{ namePrefix: 'Muse' }]
-                    });
 
-                    document.getElementById('museStatus').textContent = 'Muse: Connecting...';
-                    
-                    // Connect to device
-                    museServer = await museDevice.gatt.connect();
-                    document.getElementById('museStatus').textContent = 'Muse: Connected';
-                    document.getElementById('museStatus').className = 'status connected';
-                    document.getElementById('connectionStatusText').textContent = 'Connected to Muse';
+                    // Initialize Physio instance
+                    // console.log('Initializing Physio instance...');
+                    physio = new Physio();
 
-                    // Subscribe to EEG data
-                    const eegService = await museServer.getPrimaryService('273e0001-4c4d-1d89-9f30-0a65ccd5eb2d');
-                    const eegCharacteristic = await eegService.getCharacteristic('273e0001-4c4d-1d89-9f30-0a65ccd5eb2d');
-                    await eegCharacteristic.startNotifications();
+                    // Start the BCI device connection
+                    // console.log('Starting BCI device connection...');
+                    physio.start();
 
-                    eegCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-                        const data = Array.from(event.target.value.buffer);
-                        const message = JSON.stringify({
-                            timestamp: Date.now(),
-                            eeg: data
-                        });
-                        client.publish('bdrxr/muse_eeg', message);
-                        updateLatestData('EEG', data);
-                    });
+                    // Wait for data to start flowing before showing connected status
+                    const checkConnection = setInterval(() => {
+                        if (window.relativeBeta !== undefined && window.bands && Object.keys(window.bands).length > 0) {
+                            // console.log('Muse device connected successfully!');
+                            document.getElementById('museStatus').textContent = 'Muse: Connected';
+                            document.getElementById('museStatus').className = 'status connected';
+                            document.getElementById('connectionStatusText').textContent = 'Streaming Data...';
+                            clearInterval(checkConnection);
+                        }
+                    }, 100);
 
-                    // Subscribe to accelerometer data
-                    const accelService = await museServer.getPrimaryService('273e0002-4c4d-1d89-9f30-0a65ccd5eb2d');
-                    const accelCharacteristic = await accelService.getCharacteristic('273e0002-4c4d-1d89-9f30-0a65ccd5eb2d');
-                    await accelCharacteristic.startNotifications();
+                    // Set up an interval to check and send the processed data
+                    setInterval(() => {
+                        try {
+                            // Get the latest data from the global variables that Physio updates
+                            const betaValue = window.relativeBeta;
+                            const bands = window.bands;
 
-                    accelCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-                        const data = Array.from(event.target.value.buffer);
-                        const message = JSON.stringify({
-                            timestamp: Date.now(),
-                            accelerometer: data
-                        });
-                        client.publish('bdrxr/muse_accelerometer', message);
-                        updateLatestData('Accelerometer', data);
-                    });
+                            // Log the raw values and channel data
+                            // console.log('Raw Beta Value:', betaValue);
+                            // console.log('Raw Bands Object:', JSON.stringify(bands, null, 2));
+                            // console.log('Channel Data Ready:', window.isChannelDataReady);
+                            // console.log('Channel Sample Count:', window.channelSampleCount);
+                            // console.log('Buffer Size:', physio.BUFFER_SIZE);
+                            // console.log('Is Connected:', physio.isConnected);
+                            // console.log('Physio instance:', physio);
 
-                    // Subscribe to gyroscope data
-                    const gyroService = await museServer.getPrimaryService('273e0003-4c4d-1d89-9f30-0a65ccd5eb2d');
-                    const gyroCharacteristic = await gyroService.getCharacteristic('273e0003-4c4d-1d89-9f30-0a65ccd5eb2d');
-                    await gyroCharacteristic.startNotifications();
+                            if (betaValue !== undefined) {
+                                // Update the power display (beta value as percentage)
+                                const powerValue = (betaValue * 100).toFixed(3);
 
-                    gyroCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-                        const data = Array.from(event.target.value.buffer);
-                        const message = JSON.stringify({
-                            timestamp: Date.now(),
-                            gyroscope: data
-                        });
-                        client.publish('bdrxr/muse_gyroscope', message);
-                        updateLatestData('Gyroscope', data);
-                    });
+                                // Format the data for display with null checks
+                                const formatBandValue = (value) => {
+                                    return value !== undefined ? value.toFixed(4) : 'N/A';
+                                };
+
+                                // Check if we have valid band data
+                                const hasValidBands = bands && Object.keys(bands).length > 0;
+                                // console.log('Has Valid Bands:', hasValidBands);
+
+                                // Check if all channels have enough data
+                                const allChannelsReady = window.isChannelDataReady &&
+                                    window.isChannelDataReady[2] &&
+                                    window.isChannelDataReady[3] &&
+                                    window.isChannelDataReady[16] &&
+                                    window.isChannelDataReady[17];
+                                // console.log('All Channels Ready:', allChannelsReady);
+
+                                // Update status to show we're streaming data
+                                if (allChannelsReady && hasValidBands) {
+                                    document.getElementById('connectionStatusText').textContent = 'Streaming Data';
+                                }
+
+                                const formattedData = {
+                                    timestamp: new Date().toISOString(),
+                                    relativeBeta: betaValue.toFixed(4),
+                                    powerValue: powerValue,
+                                    bands: hasValidBands ? {
+                                        tp9: {
+                                            delta: formatBandValue(bands.tp9?.delta),
+                                            theta: formatBandValue(bands.tp9?.theta),
+                                            alpha: formatBandValue(bands.tp9?.alpha),
+                                            beta: formatBandValue(bands.tp9?.beta),
+                                            gamma: formatBandValue(bands.tp9?.gamma)
+                                        },
+                                        tp10: {
+                                            delta: formatBandValue(bands.tp10?.delta),
+                                            theta: formatBandValue(bands.tp10?.theta),
+                                            alpha: formatBandValue(bands.tp10?.alpha),
+                                            beta: formatBandValue(bands.tp10?.beta),
+                                            gamma: formatBandValue(bands.tp10?.gamma)
+                                        },
+                                        af7: {
+                                            delta: formatBandValue(bands.af7?.delta),
+                                            theta: formatBandValue(bands.af7?.theta),
+                                            alpha: formatBandValue(bands.af7?.alpha),
+                                            beta: formatBandValue(bands.af7?.beta),
+                                            gamma: formatBandValue(bands.af7?.gamma)
+                                        },
+                                        af8: {
+                                            delta: formatBandValue(bands.af8?.delta),
+                                            theta: formatBandValue(bands.af8?.theta),
+                                            alpha: formatBandValue(bands.af8?.alpha),
+                                            beta: formatBandValue(bands.af8?.beta),
+                                            gamma: formatBandValue(bands.af8?.gamma)
+                                        }
+                                    } : {
+                                        tp9: { delta: 'N/A', theta: 'N/A', alpha: 'N/A', beta: 'N/A', gamma: 'N/A' },
+                                        tp10: { delta: 'N/A', theta: 'N/A', alpha: 'N/A', beta: 'N/A', gamma: 'N/A' },
+                                        af7: { delta: 'N/A', theta: 'N/A', alpha: 'N/A', beta: 'N/A', gamma: 'N/A' },
+                                        af8: { delta: 'N/A', theta: 'N/A', alpha: 'N/A', beta: 'N/A', gamma: 'N/A' }
+                                    }
+                                };
+
+                                // Log the formatted data
+                                // console.log('Formatted Data:', JSON.stringify(formattedData, null, 2));
+
+                                // Send to MQTT
+                                const message = JSON.stringify(formattedData);
+                                client.publish(getMqttConfig().topic, message);
+
+                                // Update the display
+                                updateLatestData('Processed EEG', formattedData);
+                            }
+                        } catch (error) {
+                            console.error('Error processing data:', error);
+                        }
+                    }, 100); // Check every 100ms
 
                 } catch (error) {
+                    console.error('Connection error:', error);
                     document.getElementById('museStatus').textContent = 'Muse: Error - ' + error.message;
                     document.getElementById('museStatus').className = 'status disconnected';
                 }
             });
 
-            // Update the latest data display
+            // Update the latest data display with better formatting
             function updateLatestData(type, data) {
                 const latestData = document.getElementById('latestData');
-                latestData.textContent = `Latest ${type} Data:\n${JSON.stringify(data, null, 2)}`;
+                const displayHtml = `
+                    <div class="data-grid">
+                        <div class="data-section basic-info">
+                            <div class="data-section-title">Basic Information</div>
+                            <div class="data-item">
+                                <span class="data-label">Timestamp</span>
+                                <span class="data-value">${data.timestamp}</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Relative Beta</span>
+                                <span class="data-value">${data.relativeBeta}</span>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-label">Power Value</span>
+                                <span class="data-value">${data.powerValue}%</span>
+                            </div>
+                        </div>
+                        <div class="data-section">
+                            <div class="data-section-title">TP9</div>
+                            <div class="band-grid">
+                                <div class="band-value">
+                                    <div class="band-label">Delta</div>
+                                    <div class="band-number">${data.bands.tp9.delta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Theta</div>
+                                    <div class="band-number">${data.bands.tp9.theta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Alpha</div>
+                                    <div class="band-number">${data.bands.tp9.alpha}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Beta</div>
+                                    <div class="band-number">${data.bands.tp9.beta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Gamma</div>
+                                    <div class="band-number">${data.bands.tp9.gamma}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="data-section">
+                            <div class="data-section-title">TP10</div>
+                            <div class="band-grid">
+                                <div class="band-value">
+                                    <div class="band-label">Delta</div>
+                                    <div class="band-number">${data.bands.tp10.delta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Theta</div>
+                                    <div class="band-number">${data.bands.tp10.theta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Alpha</div>
+                                    <div class="band-number">${data.bands.tp10.alpha}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Beta</div>
+                                    <div class="band-number">${data.bands.tp10.beta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Gamma</div>
+                                    <div class="band-number">${data.bands.tp10.gamma}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="data-section">
+                            <div class="data-section-title">AF7</div>
+                            <div class="band-grid">
+                                <div class="band-value">
+                                    <div class="band-label">Delta</div>
+                                    <div class="band-number">${data.bands.af7.delta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Theta</div>
+                                    <div class="band-number">${data.bands.af7.theta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Alpha</div>
+                                    <div class="band-number">${data.bands.af7.alpha}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Beta</div>
+                                    <div class="band-number">${data.bands.af7.beta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Gamma</div>
+                                    <div class="band-number">${data.bands.af7.gamma}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="data-section">
+                            <div class="data-section-title">AF8</div>
+                            <div class="band-grid">
+                                <div class="band-value">
+                                    <div class="band-label">Delta</div>
+                                    <div class="band-number">${data.bands.af8.delta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Theta</div>
+                                    <div class="band-number">${data.bands.af8.theta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Alpha</div>
+                                    <div class="band-number">${data.bands.af8.alpha}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Beta</div>
+                                    <div class="band-number">${data.bands.af8.beta}</div>
+                                </div>
+                                <div class="band-value">
+                                    <div class="band-label">Gamma</div>
+                                    <div class="band-number">${data.bands.af8.gamma}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                latestData.innerHTML = displayHtml;
             }
 
             // Handle device disconnection
             if (museDevice) {
                 museDevice.addEventListener('gattserverdisconnected', () => {
+                    // console.log('Muse device disconnected');
                     document.getElementById('museStatus').textContent = 'Muse: Disconnected';
                     document.getElementById('museStatus').className = 'status disconnected';
+                    if (physio) {
+                        physio.device.disconnect();
+                    }
                 });
             }
         });
     </script>
 </body>
-</html> 
+
+</html>
