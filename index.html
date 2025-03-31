@@ -461,6 +461,33 @@
             let physio = null;
             let museDevice = null;
             let museServer = null;
+            let connectionCheckInterval = null;
+            let dataProcessingInterval = null;
+
+            // Function to cleanup intervals
+            function cleanupIntervals() {
+                if (connectionCheckInterval) {
+                    clearInterval(connectionCheckInterval);
+                    connectionCheckInterval = null;
+                }
+                if (dataProcessingInterval) {
+                    clearInterval(dataProcessingInterval);
+                    dataProcessingInterval = null;
+                }
+            }
+
+            // Function to cleanup resources
+            function cleanupResources() {
+                cleanupIntervals();
+                if (physio) {
+                    physio.device.disconnect();
+                    physio = null;
+                }
+                if (client) {
+                    client.end();
+                    client = null;
+                }
+            }
 
             // Function to get current MQTT configuration
             function getMqttConfig() {
@@ -514,6 +541,7 @@
                 });
 
                 client.on('error', (error) => {
+                    cleanupResources();
                     document.getElementById('mqttStatus').textContent = 'MQTT: Error - ' + error.message;
                     document.getElementById('mqttStatus').className = 'status disconnected';
                     document.getElementById('connectionStatusText').textContent = 'MQTT Error';
@@ -523,6 +551,7 @@
                 });
 
                 client.on('close', () => {
+                    cleanupResources();
                     document.getElementById('mqttStatus').textContent = 'MQTT: Connection closed';
                     document.getElementById('mqttStatus').className = 'status disconnected';
                     document.getElementById('connectionStatusText').textContent = 'MQTT Disconnected';
@@ -538,21 +567,7 @@
                     setupMqttConnection();
                 } else {
                     try {
-                        // Disconnect from Muse if connected
-                        if (physio) {
-                            physio.device.disconnect();
-                            physio = null;
-                            document.getElementById('museStatus').textContent = 'Muse: Disconnected';
-                            document.getElementById('museStatus').className = 'status disconnected';
-                        }
-
-                        // Disconnect from MQTT
-                        client.end();
-                        document.getElementById('mqttStatus').textContent = 'MQTT: Disconnected';
-                        document.getElementById('mqttStatus').className = 'status disconnected';
-                        document.getElementById('connectionStatusText').textContent = 'MQTT Disconnected';
-                        document.getElementById('mqttConnectButton').textContent = 'Connect to MQTT';
-                        document.getElementById('mqttConnectButton').classList.remove('refresh');
+                        cleanupResources();
 
                         // Wait a moment before reconnecting
                         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -575,43 +590,39 @@
                 }
 
                 try {
-                    // console.log('Starting Muse connection process...');
+                    // Clean up any existing intervals
+                    cleanupIntervals();
+
                     document.getElementById('connectionStatusText').textContent = 'Searching for Muse...';
 
                     // Initialize Physio instance
-                    // console.log('Initializing Physio instance...');
                     physio = new Physio();
 
                     // Start the BCI device connection
-                    // console.log('Starting BCI device connection...');
                     physio.start();
 
                     // Wait for data to start flowing before showing connected status
-                    const checkConnection = setInterval(() => {
+                    connectionCheckInterval = setInterval(() => {
                         if (window.relativeBeta !== undefined && window.bands && Object.keys(window.bands).length > 0) {
-                            // console.log('Muse device connected successfully!');
                             document.getElementById('museStatus').textContent = 'Muse: Connected';
                             document.getElementById('museStatus').className = 'status connected';
                             document.getElementById('connectionStatusText').textContent = 'Streaming Data...';
-                            clearInterval(checkConnection);
+                            clearInterval(connectionCheckInterval);
+                            connectionCheckInterval = null;
                         }
                     }, 100);
 
                     // Set up an interval to check and send the processed data
-                    setInterval(() => {
+                    let lastMqttUpdateTime = 0;
+                    let lastDomUpdateTime = 0;
+                    const MQTT_UPDATE_INTERVAL = 100; // Update MQTT every 100ms
+                    const DOM_UPDATE_INTERVAL = 500; // Update DOM every 500ms
+
+                    dataProcessingInterval = setInterval(() => {
                         try {
-                            // Get the latest data from the global variables that Physio updates
+                            const currentTime = Date.now();
                             const betaValue = window.relativeBeta;
                             const bands = window.bands;
-
-                            // Log the raw values and channel data
-                            // console.log('Raw Beta Value:', betaValue);
-                            // console.log('Raw Bands Object:', JSON.stringify(bands, null, 2));
-                            // console.log('Channel Data Ready:', window.isChannelDataReady);
-                            // console.log('Channel Sample Count:', window.channelSampleCount);
-                            // console.log('Buffer Size:', physio.BUFFER_SIZE);
-                            // console.log('Is Connected:', physio.isConnected);
-                            // console.log('Physio instance:', physio);
 
                             if (betaValue !== undefined) {
                                 // Update the power display (beta value as percentage)
@@ -624,7 +635,6 @@
 
                                 // Check if we have valid band data
                                 const hasValidBands = bands && Object.keys(bands).length > 0;
-                                // console.log('Has Valid Bands:', hasValidBands);
 
                                 // Check if all channels have enough data
                                 const allChannelsReady = window.isChannelDataReady &&
@@ -632,7 +642,6 @@
                                     window.isChannelDataReady[3] &&
                                     window.isChannelDataReady[16] &&
                                     window.isChannelDataReady[17];
-                                // console.log('All Channels Ready:', allChannelsReady);
 
                                 // Update status to show we're streaming data
                                 if (allChannelsReady && hasValidBands) {
@@ -680,164 +689,182 @@
                                     }
                                 };
 
-                                // Log the formatted data
-                                // console.log('Formatted Data:', JSON.stringify(formattedData, null, 2));
+                                // Send to MQTT at regular intervals
+                                if (currentTime - lastMqttUpdateTime >= MQTT_UPDATE_INTERVAL) {
+                                    const message = JSON.stringify(formattedData);
+                                    client.publish(getMqttConfig().topic, message);
+                                    lastMqttUpdateTime = currentTime;
+                                }
 
-                                // Send to MQTT
-                                const message = JSON.stringify(formattedData);
-                                client.publish(getMqttConfig().topic, message);
-
-                                // Update the display
-                                updateLatestData('Processed EEG', formattedData);
+                                // Update DOM less frequently
+                                if (currentTime - lastDomUpdateTime >= DOM_UPDATE_INTERVAL) {
+                                    // console.log('Updating DOM with data:', formattedData); // Debug log
+                                    updateLatestData('Processed EEG', formattedData);
+                                    lastDomUpdateTime = currentTime;
+                                }
+                            } else {
+                                console.log('Beta value is undefined'); // Debug log
                             }
                         } catch (error) {
                             console.error('Error processing data:', error);
                         }
-                    }, 100); // Check every 100ms
+                    }, 10); // Check every 10ms but only update at specified intervals
 
                 } catch (error) {
                     console.error('Connection error:', error);
                     document.getElementById('museStatus').textContent = 'Muse: Error - ' + error.message;
                     document.getElementById('museStatus').className = 'status disconnected';
+                    cleanupResources();
                 }
             });
 
             // Update the latest data display with better formatting
             function updateLatestData(type, data) {
-                const latestData = document.getElementById('latestData');
-                const displayHtml = `
-                    <div class="data-grid">
-                        <div class="data-section basic-info">
-                            <div class="data-section-title">Basic Information</div>
-                            <div class="data-item">
-                                <span class="data-label">Timestamp</span>
-                                <span class="data-value">${data.timestamp}</span>
+                try {
+                    const latestData = document.getElementById('latestData');
+                    if (!latestData) {
+                        console.error('latestData element not found');
+                        return;
+                    }
+
+                    const displayHtml = `
+                        <div class="data-grid">
+                            <div class="data-section basic-info">
+                                <div class="data-section-title">Basic Information</div>
+                                <div class="data-item">
+                                    <span class="data-label">Timestamp</span>
+                                    <span class="data-value">${data.timestamp}</span>
+                                </div>
+                                <div class="data-item">
+                                    <span class="data-label">Relative Beta</span>
+                                    <span class="data-value">${data.relativeBeta}</span>
+                                </div>
+                                <div class="data-item">
+                                    <span class="data-label">Power Value</span>
+                                    <span class="data-value">${data.powerValue}%</span>
+                                </div>
                             </div>
-                            <div class="data-item">
-                                <span class="data-label">Relative Beta</span>
-                                <span class="data-value">${data.relativeBeta}</span>
+                            <div class="data-section">
+                                <div class="data-section-title">TP9</div>
+                                <div class="band-grid">
+                                    <div class="band-value">
+                                        <div class="band-label">Delta</div>
+                                        <div class="band-number">${data.bands.tp9.delta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Theta</div>
+                                        <div class="band-number">${data.bands.tp9.theta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Alpha</div>
+                                        <div class="band-number">${data.bands.tp9.alpha}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Beta</div>
+                                        <div class="band-number">${data.bands.tp9.beta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Gamma</div>
+                                        <div class="band-number">${data.bands.tp9.gamma}</div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="data-item">
-                                <span class="data-label">Power Value</span>
-                                <span class="data-value">${data.powerValue}%</span>
+                            <div class="data-section">
+                                <div class="data-section-title">TP10</div>
+                                <div class="band-grid">
+                                    <div class="band-value">
+                                        <div class="band-label">Delta</div>
+                                        <div class="band-number">${data.bands.tp10.delta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Theta</div>
+                                        <div class="band-number">${data.bands.tp10.theta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Alpha</div>
+                                        <div class="band-number">${data.bands.tp10.alpha}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Beta</div>
+                                        <div class="band-number">${data.bands.tp10.beta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Gamma</div>
+                                        <div class="band-number">${data.bands.tp10.gamma}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="data-section">
+                                <div class="data-section-title">AF7</div>
+                                <div class="band-grid">
+                                    <div class="band-value">
+                                        <div class="band-label">Delta</div>
+                                        <div class="band-number">${data.bands.af7.delta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Theta</div>
+                                        <div class="band-number">${data.bands.af7.theta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Alpha</div>
+                                        <div class="band-number">${data.bands.af7.alpha}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Beta</div>
+                                        <div class="band-number">${data.bands.af7.beta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Gamma</div>
+                                        <div class="band-number">${data.bands.af7.gamma}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="data-section">
+                                <div class="data-section-title">AF8</div>
+                                <div class="band-grid">
+                                    <div class="band-value">
+                                        <div class="band-label">Delta</div>
+                                        <div class="band-number">${data.bands.af8.delta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Theta</div>
+                                        <div class="band-number">${data.bands.af8.theta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Alpha</div>
+                                        <div class="band-number">${data.bands.af8.alpha}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Beta</div>
+                                        <div class="band-number">${data.bands.af8.beta}</div>
+                                    </div>
+                                    <div class="band-value">
+                                        <div class="band-label">Gamma</div>
+                                        <div class="band-number">${data.bands.af8.gamma}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="data-section">
-                            <div class="data-section-title">TP9</div>
-                            <div class="band-grid">
-                                <div class="band-value">
-                                    <div class="band-label">Delta</div>
-                                    <div class="band-number">${data.bands.tp9.delta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Theta</div>
-                                    <div class="band-number">${data.bands.tp9.theta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Alpha</div>
-                                    <div class="band-number">${data.bands.tp9.alpha}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Beta</div>
-                                    <div class="band-number">${data.bands.tp9.beta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Gamma</div>
-                                    <div class="band-number">${data.bands.tp9.gamma}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="data-section">
-                            <div class="data-section-title">TP10</div>
-                            <div class="band-grid">
-                                <div class="band-value">
-                                    <div class="band-label">Delta</div>
-                                    <div class="band-number">${data.bands.tp10.delta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Theta</div>
-                                    <div class="band-number">${data.bands.tp10.theta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Alpha</div>
-                                    <div class="band-number">${data.bands.tp10.alpha}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Beta</div>
-                                    <div class="band-number">${data.bands.tp10.beta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Gamma</div>
-                                    <div class="band-number">${data.bands.tp10.gamma}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="data-section">
-                            <div class="data-section-title">AF7</div>
-                            <div class="band-grid">
-                                <div class="band-value">
-                                    <div class="band-label">Delta</div>
-                                    <div class="band-number">${data.bands.af7.delta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Theta</div>
-                                    <div class="band-number">${data.bands.af7.theta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Alpha</div>
-                                    <div class="band-number">${data.bands.af7.alpha}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Beta</div>
-                                    <div class="band-number">${data.bands.af7.beta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Gamma</div>
-                                    <div class="band-number">${data.bands.af7.gamma}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="data-section">
-                            <div class="data-section-title">AF8</div>
-                            <div class="band-grid">
-                                <div class="band-value">
-                                    <div class="band-label">Delta</div>
-                                    <div class="band-number">${data.bands.af8.delta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Theta</div>
-                                    <div class="band-number">${data.bands.af8.theta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Alpha</div>
-                                    <div class="band-number">${data.bands.af8.alpha}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Beta</div>
-                                    <div class="band-number">${data.bands.af8.beta}</div>
-                                </div>
-                                <div class="band-value">
-                                    <div class="band-label">Gamma</div>
-                                    <div class="band-number">${data.bands.af8.gamma}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                latestData.innerHTML = displayHtml;
+                    `;
+                    latestData.innerHTML = displayHtml;
+                } catch (error) {
+                    console.error('Error updating display:', error);
+                }
             }
 
             // Handle device disconnection
             if (museDevice) {
                 museDevice.addEventListener('gattserverdisconnected', () => {
-                    // console.log('Muse device disconnected');
                     document.getElementById('museStatus').textContent = 'Muse: Disconnected';
                     document.getElementById('museStatus').className = 'status disconnected';
-                    if (physio) {
-                        physio.device.disconnect();
-                    }
+                    cleanupResources();
                 });
             }
+
+            // Clean up on page unload
+            window.addEventListener('beforeunload', () => {
+                cleanupResources();
+            });
         });
     </script>
 </body>
