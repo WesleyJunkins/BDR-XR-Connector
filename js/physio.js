@@ -4,6 +4,13 @@
 
 var Physio = function () {
   this.buffer = [];
+  this.rawDataBuffer = []; // Buffer for raw data samples
+  this.maxBufferSize = 256; // Store 1 second of data at 256 Hz
+  this.lastSampleTime = 0;
+  this.sampleCount = 0;
+  this.lastSecondTime = 0;
+  this.samplesPerPacket = 12; // Number of samples per packet from Muse device
+
   //channels 2,16,3,17
 
   // Set up filter
@@ -32,25 +39,52 @@ var Physio = function () {
   this.isConnected = false;
 
   this.addData = (sample, channel) => {
+    const currentTime = Date.now();
+    
+    // Track timing
+    if (this.lastSampleTime === 0) {
+      this.lastSampleTime = currentTime;
+      this.lastSecondTime = currentTime;
+    }
+    
+    // Count samples
+    this.sampleCount += sample.length; // Count all samples in the packet
+    
+    // Reset counter every second
+    if (currentTime - this.lastSecondTime >= 1000) {
+      this.sampleCount = 0;
+      this.lastSecondTime = currentTime;
+    }
+
     if (!channels[channel]) {
       channels[channel] = [];
-      //isChannelDataReady[channel] = false
       window.channelSampleCount[channel] = 0;
     }
 
-    // Add all samples to current array
-    for (i in sample) {
+    // Process each sample in the packet
+    for (let i = 0; i < sample.length; i++) {
+      // Add sample to channel buffer
       if (channels[channel].length > this.BUFFER_SIZE - 1) {
         channels[channel].shift();
       }
-
       channels[channel].push(sample[i]);
-      window.channelSampleCount[channel] =
-        window.channelSampleCount[channel] + 1;
+      window.channelSampleCount[channel] = window.channelSampleCount[channel] + 1;
 
-      //var data = { TP9: sample[i] };
-      //window.rawSignalGraph.series.addData(data);
-      //window.rawSignalGraph.render()
+      // Store individual raw data sample
+      const rawSample = {
+        timestamp: new Date().toISOString(),
+        channel: channel,
+        data: [sample[i]], // Store single sample
+        sampleNumber: this.sampleCount + i,
+        packetSize: 1
+      };
+      
+      this.rawDataBuffer.push(rawSample);
+      
+      // Keep only the last second of data
+      if (this.rawDataBuffer.length > this.maxBufferSize) {
+        this.rawDataBuffer.shift();
+      }
     }
 
     tempSeriesData[channel] = sample;
@@ -63,6 +97,14 @@ var Physio = function () {
 
   this.getBuffer = () => {
     return this.buffer;
+  };
+
+  this.getRawDataBuffer = () => {
+    return this.rawDataBuffer;
+  };
+
+  this.clearRawDataBuffer = () => {
+    this.rawDataBuffer = [];
   };
 
   psdToPlotPSD = function (psd, max) {
