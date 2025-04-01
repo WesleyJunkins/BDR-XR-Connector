@@ -347,7 +347,7 @@
             justify-content: center;
         }
 
-        #mqttConnectButton {
+        #mqttConnectButton, #connectButton {
             background: var(--primary-color);
             color: white;
             padding: 10px 20px;
@@ -358,12 +358,12 @@
             transition: all 0.3s;
         }
 
-        #mqttConnectButton:hover {
+        #mqttConnectButton:hover, #connectButton:hover {
             background: #0052a3;
             transform: translateY(-2px);
         }
 
-        #mqttConnectButton:disabled {
+        #mqttConnectButton:disabled, #connectButton:disabled {
             background: #cccccc;
             cursor: not-allowed;
         }
@@ -441,7 +441,7 @@
     </div>
 
     <div class="mqtt-config">
-        <h3>MQTT Configuration</h3>
+        <h3>Connection Setup</h3>
         <div class="config-grid">
             <div class="config-item">
                 <label for="protocol">Protocol:</label>
@@ -473,6 +473,7 @@
         </div>
         <div class="button-container">
             <button id="mqttConnectButton">Connect to MQTT</button>
+            <button id="connectButton">Connect to Muse</button>
         </div>
     </div>
 
@@ -494,8 +495,6 @@
         </div>
     </div>
 
-    <button id="connectButton">Connect to Muse</button>
-    
     <div class="data-display">
         <h3>Latest Data:</h3>
         <pre id="latestData">No data yet</pre>
