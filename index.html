@@ -3,7 +3,7 @@
 
 <head>
     <title>Muse Headset Connector</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <script src="js/fili.min.js"></script>
     <script src="js/bci.min.js"></script>
     <script src="js/BCIDevice.build.js"></script>
@@ -347,7 +347,7 @@
             justify-content: center;
         }
 
-        #mqttConnectButton, #connectButton {
+        #mqttConnectButton {
             background: var(--primary-color);
             color: white;
             padding: 10px 20px;
@@ -358,12 +358,12 @@
             transition: all 0.3s;
         }
 
-        #mqttConnectButton:hover, #connectButton:hover {
+        #mqttConnectButton:hover {
             background: #0052a3;
             transform: translateY(-2px);
         }
 
-        #mqttConnectButton:disabled, #connectButton:disabled {
+        #mqttConnectButton:disabled {
             background: #cccccc;
             cursor: not-allowed;
         }
@@ -473,7 +473,7 @@
         </div>
         <div class="button-container">
             <button id="mqttConnectButton">Connect to MQTT</button>
-    <button id="connectButton">Connect to Muse</button>
+            <button id="connectButton">Connect to Muse</button>
         </div>
     </div>
 
@@ -494,7 +494,7 @@
             </button>
         </div>
     </div>
-    
+
     <div class="data-display">
         <h3>Latest Data:</h3>
         <pre id="latestData">No data yet</pre>
@@ -512,6 +512,13 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {
+            // Check if MQTT is loaded
+            if (typeof mqtt === 'undefined') {
+                console.error('MQTT library not loaded. Please check your internet connection.');
+                document.getElementById('connectionStatusText').textContent = 'Error: MQTT library not loaded';
+                return;
+            }
+
             // Default MQTT configuration
             const defaultConfig = {
                 protocol: 'wss',
