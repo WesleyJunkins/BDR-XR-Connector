@@ -708,6 +708,7 @@
                                         samples: rawDataBuffer,
                                         processedData: {
                                             relativeBeta: window.relativeBeta,
+                                            powerValue: (window.relativeBeta * 100).toFixed(3),
                                             bands: window.bands
                                         }
                                     };
